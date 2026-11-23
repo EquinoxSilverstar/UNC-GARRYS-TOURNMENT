@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#071108">
+  <title>Green VS Arena — Tournament Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="g-general">
+
+  <!-- Background effects -->
+  <div class="bg-fx" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="Green VS Arena home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><path d="M16 3l3.2 8.8L28 15l-8.8 3.2L16 27l-3.2-8.8L4 15l8.8-3.2L16 3z"/></svg>
+      </span>
+      <span>GREEN VS <b>ARENA</b></span>
+    </a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <button class="nav-link active" data-page="dashboard" type="button">Overview</button>
+      <button class="nav-link" data-page="tournament" type="button">Tournament</button>
+      <button class="nav-link" data-page="players" type="button">Players</button>
+      <button class="nav-link" data-page="results" type="button">Results</button>
+      <button class="nav-link" data-page="history" type="button">History</button>
+      <button class="nav-link host-only" data-page="guests" type="button">Guests</button>
+      <button class="nav-link host-only" data-page="competitors" type="button">Competitors</button>
+    </nav>
+    <button id="shareBtn" class="btn ghost host-only" type="button">Share</button>
+    <button id="resetBtn" class="btn ghost hidden" type="button">
+      <span aria-hidden="true">+</span> New tournament
+    </button>
+  </header>
+
+  <main class="app-shell">
+
+    <!-- ===== OVERVIEW ===== -->
+    <section id="dashboardView" class="page-view">
+      <div class="dashboard-hero">
+        <div>
+          <p class="eyebrow">ARENA OVERVIEW</p>
+          <h1>Every match.<br><span>One scoreboard.</span></h1>
+          <p id="dashboardIntro">Create your next competition and bring every contender into the arena.</p>
+        </div>
+        <button id="dashboardCreateBtn" class="btn primary hero-action" type="button">Create tournament <span>→</span></button>
+      </div>
+
+      <p class="eyebrow quick-label">QUICK START · PICK YOUR GAME</p>
+      <div id="quickGames" class="quick-games"></div>
+
+      <div class="stat-grid">
+        <article class="stat-card">
+          <p>Contenders</p>
+          <strong id="statPlayers">0</strong>
+          <span>Registered</span>
+        </article>
+        <article class="stat-card">
+          <p>Matches</p>
+          <strong id="statMatches">0</strong>
+          <span id="statMatchesLabel">Ready to create</span>
+        </article>
+        <article class="stat-card">
+          <p>Completed</p>
+          <strong id="statCompleted">0</strong>
+          <span>Results entered</span>
+        </article>
+        <article class="stat-card accent">
+          <p>Format</p>
+          <strong id="statFormat">—</strong>
+          <span id="statFormatLabel">No event selected</span>
+        </article>
+      </div>
+
+      <div class="dashboard-grid">
+        <article class="panel dashboard-event">
+          <div class="section-heading">
+            <div><p class="eyebrow">ACTIVE EVENT</p><h2 id="dashboardEventName">No tournament yet</h2></div>
+            <span id="dashboardStatus" class="count-badge">Draft</span>
+          </div>
+          <div id="dashboardEventBody" class="event-empty">
+            <div class="empty-icon" aria-hidden="true">＋</div>
+            <div><b>Start a new competition</b><p>Add players, choose a format, and begin the event.</p></div>
+          </div>
+        </article>
+
+        <article class="panel leaderboard-preview">
+          <div class="section-heading"><div><p class="eyebrow">LEADERBOARD</p><h2>Top contenders</h2></div></div>
+          <div id="leaderboardPreview"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===== SETUP ===== -->
+    <section id="setupView" class="setup-view page-view hidden">
+      <div class="setup-top">
+        <p class="eyebrow">NEW EVENT · STEP 1 OF 2</p>
+        <h1>Pick your <span>arena.</span></h1>
+        <p class="intro-copy">Choose the game, add every contender, and let the bracket do the rest. The whole app changes colour to match your arena.</p>
+      </div>
+
+      <!-- Cards are built by script.js from the GAMES list -->
+      <div id="gameSelector" class="game-selector" role="radiogroup" aria-label="Competition type"></div>
+      <div id="gamePreview" class="game-preview"></div>
+
+      <div class="setup-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">STEP 2 OF 2</p>
+            <h2>Tournament setup</h2>
+          </div>
+          <span id="setupCount" class="count-badge">0 players</span>
+        </div>
+
+        <div class="setup-cols">
+          <div class="form-grid">
+            <div class="field">
+              <label for="tName">Tournament name</label>
+              <input id="tName" type="text" placeholder="Friday Night Showdown">
+            </div>
+            <div class="field">
+              <label for="tFormat">Competition format</label>
+              <select id="tFormat">
+                <option value="single">Single elimination — knockout</option>
+                <option value="robin">Round robin — everyone plays</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="titleSelect">Game title</label>
+              <select id="titleSelect"></select>
+              <input id="customTitleInput" type="text" placeholder="Enter a custom game title" class="hidden" style="margin-top:8px">
+            </div>
+            <div class="field">
+              <label for="coverInput">Tournament cover</label>
+              <div id="coverUpload" class="cover-upload">
+                <img id="coverPreview" alt="" hidden>
+                <div id="coverEmpty" class="cover-empty">
+                  <span>＋</span>
+                  <p><b>Add cover image</b><small>JPG, PNG or WebP</small></p>
+                </div>
+                <input id="coverInput" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload tournament cover">
+                <button id="removeCover" class="cover-remove hidden" type="button" aria-label="Remove cover image">×</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="pName">Players or teams</label>
+              <div class="add-player">
+                <input id="pName" type="text" placeholder="Enter a name, press Enter">
+                <button id="addBtn" class="icon-btn" type="button" aria-label="Add player">+</button>
+              </div>
+            </div>
+            <div class="roster">
+              <div class="roster-heading">
+                <span>Contender list</span>
+                <button id="sampleBtn" class="text-btn" type="button">Add sample players</button>
+              </div>
+              <ul id="playerList" class="chips"></ul>
+            </div>
+          </div>
+        </div>
+
+        <p id="setupMsg" class="msg" role="alert"></p>
+        <button id="startBtn" class="btn primary start-btn" type="button">
+          Start tournament <span aria-hidden="true">→</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== LIVE TOURNAMENT ===== -->
+    <section id="tournamentView" class="page-view hidden">
+      <div id="tournamentHeader" class="tournament-header">
+        <div>
+          <p class="eyebrow">LIVE TOURNAMENT</p>
+          <h1 id="tTitle"></h1>
+        </div>
+        <p id="tSub" class="format-badge"></p>
+        <div class="t-progress" aria-hidden="true"><i id="tProgress"></i></div>
+        <div id="champion" class="champion hidden"></div>
+      </div>
+      <div id="content"></div>
+    </section>
+
+    <!-- ===== PLAYERS ===== -->
+    <section id="playersView" class="page-view hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">CONTENDER DIRECTORY</p><h1>Players & teams</h1></div>
+        <button id="playersAddBtn" class="btn primary" type="button">＋ Add contender</button>
+      </div>
+      <div class="panel players-panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">REGISTERED</p><h2 id="playersHeading">No players</h2></div>
+          <span id="playersCount" class="count-badge">0 entrants</span>
+        </div>
+        <div id="playersGrid" class="players-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===== RESULTS ===== -->
+    <section id="resultsView" class="page-view hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">MATCH ARCHIVE</p><h1>Results</h1></div>
+        <span id="resultsProgress" class="count-badge">0% complete</span>
+      </div>
+      <div class="results-layout">
+        <div class="panel">
+          <div class="section-heading"><div><p class="eyebrow">RECENT RESULTS</p><h2>Completed matches</h2></div></div>
+          <div id="resultsList" class="results-list"></div>
+        </div>
+        <div class="panel">
+          <div class="section-heading"><div><p class="eyebrow">EVENT STATUS</p><h2>Progress</h2></div></div>
+          <div class="progress-ring-wrap">
+            <div id="progressRing" class="progress-ring"><strong id="progressPercent">0%</strong></div>
+            <div><b id="progressTitle">No active event</b><p id="progressDetail">Start a tournament to see live progress.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== HISTORY ===== -->
+    <section id="historyView" class="page-view hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">TOURNAMENT ARCHIVE</p><h1>Past tournaments</h1></div>
+        <button id="historyNewBtn" class="btn primary" type="button">＋ New tournament</button>
+      </div>
+      <div class="history-toolbar">
+        <div class="history-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="historySearch" type="search" placeholder="Search tournament history">
+        </div>
+        <select id="historyFilter" aria-label="Filter tournament history">
+          <option value="all">All competitions</option>
+          <option value="soccer">Soccer</option>
+          <option value="fighting">Fighting games</option>
+          <option value="shooter">Shooter games</option>
+          <option value="general">General arena</option>
+        </select>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </section>
+
+    <!-- ===== GUESTS ===== -->
+    <section id="guestsView" class="page-view hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">SPECTATOR ACCESS</p><h1>Guest room</h1></div>
+        <button id="guestShareBtn" class="btn primary" type="button">Create guest link</button>
+      </div>
+      <div class="audience-grid">
+        <article class="panel audience-share">
+          <div class="section-heading"><div><p class="eyebrow">LIVE VIEW LINK</p><h2>Share with guests</h2></div></div>
+          <div class="share-preview">
+            <div class="share-qr" aria-hidden="true"><span>GA</span></div>
+            <div>
+              <b id="guestLinkTitle">Tournament not started</b>
+              <p id="guestLinkText">Create a tournament first to generate an access link.</p>
+              <div class="link-row"><input id="guestLinkInput" readonly value=""><button id="copyGuestLink" class="btn small" type="button">Copy</button></div>
+            </div>
+          </div>
+        </article>
+        <article class="panel audience-status">
+          <div class="section-heading"><div><p class="eyebrow">READ-ONLY VIEW</p><h2>What guests see</h2></div></div>
+          <ul class="access-list">
+            <li><span>01</span><p><b>Live bracket</b><small>Current rounds and matchups</small></p></li>
+            <li><span>02</span><p><b>Live scores</b><small>Updated when the host saves a result</small></p></li>
+            <li><span>03</span><p><b>No editing</b><small>Guests can only watch and follow</small></p></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===== COMPETITOR ===== -->
+    <section id="competitorsView" class="page-view hidden">
+      <div class="page-heading">
+        <div><p class="eyebrow">COMPETITOR VIEW</p><h1>My matches</h1></div>
+        <span id="competitorCount" class="count-badge">0 contenders</span>
+      </div>
+      <div class="competitor-layout">
+        <aside class="panel">
+          <div class="section-heading"><div><p class="eyebrow">SELECT CONTENDER</p><h2>Competitors</h2></div></div>
+          <div id="competitorPicker" class="competitor-picker"></div>
+        </aside>
+        <article class="panel">
+          <div class="section-heading"><div><p class="eyebrow">PERSONAL MATCH CARD</p><h2 id="competitorTitle">Select a competitor</h2></div></div>
+          <div id="competitorMatches" class="competitor-matches"></div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="shareDialog" class="share-dialog">
+    <form method="dialog">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">TOURNAMENT LINK</p><h2>Invite spectators</h2></div>
+        <button class="dialog-close" value="close" aria-label="Close">×</button>
+      </div>
+      <p class="dialog-copy">Anyone with this link can open a read-only view of the tournament.</p>
+      <div class="audience-tabs" role="group" aria-label="Link audience">
+        <button type="button" class="audience-tab active" data-view="guest">Guest view</button>
+        <button type="button" class="audience-tab" data-view="competitor">Competitor view</button>
+      </div>
+      <div class="dialog-link">
+        <input id="shareLinkInput" readonly value="">
+        <button id="dialogCopyBtn" class="btn primary" type="button">Copy link</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="script.js"></script>
+</body>
+</html>

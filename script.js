@@ -52,7 +52,42 @@ const gameTitle = () => state.title || (GAMES[state.game] || GAMES.general).name
 
 // ---------- State (saved in the browser so refresh keeps it) ----------
 function freshState() {
-  return { name: "", format: "single", game: "general", title: "", titleCustom: false, cover: "", players: [], rounds: [], matches: [], started: false, archived: false, champion: null };
+  return { name: "", format: "single", game: "general", title: "", titleCustom: false, cover: "", players: [], rounds: [], matches: [], started: false, archived: false, champion: null, eventId: "" };
+}
+
+// Every event keeps one stable id so its History entry can be corrected
+// in place instead of being duplicated.
+function newEventId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+// Saves made before event ids existed already have a History entry. Adopt
+// that entry when it clearly belongs to this event, so correcting an old
+// tournament updates its card instead of creating a second one.
+function adoptLegacyEntry() {
+  const matches = tournamentHistory.filter((item) =>
+    item.name === state.name &&
+    (item.game || "general") === state.game &&
+    item.format === state.format &&
+    item.title === gameTitle() &&
+    Array.isArray(item.players) &&
+    item.players.length === state.players.length
+  );
+  if (matches.length === 1) {
+    state.eventId = matches[0].id;
+  } else if (matches.length > 1 && tournamentHistory[0] && matches.includes(tournamentHistory[0])) {
+    // Ambiguous save: only trust it when the newest entry is one of the matches
+    state.eventId = tournamentHistory[0].id;
+  }
+}
+
+function eventId() {
+  if (!state.eventId) {
+    if (state.archived) adoptLegacyEntry();
+    if (!state.eventId) state.eventId = newEventId();
+    save();
+  }
+  return state.eventId;
 }
 function save() {
   if (!publicView) localStorage.setItem("greenArena", JSON.stringify(state));
@@ -389,6 +424,8 @@ $("startBtn").onclick = () => {
   $("setupMsg").textContent = "";
   state.name = $("tName").value.trim() || "My Tournament";
   state.format = $("tFormat").value;
+  // Rebuilding a running event keeps its id, so History is corrected, not duplicated.
+  state.eventId = state.started ? eventId() : newEventId();
   state.started = true;
   state.archived = false;
   state.champion = null;
@@ -404,7 +441,7 @@ $("startBtn").onclick = () => {
 function openSetup(game) {
   if (state.started) {
     if (!confirm("Start a new tournament? The current one will be saved to History.")) return;
-    archiveTournament();
+    archiveTournament(true);
     state = freshState();
   }
   if (game) state.game = game;
@@ -415,7 +452,7 @@ function openSetup(game) {
 
 $("resetBtn").onclick = () => {
   if (confirm("Start over? Current tournament will be saved to History.")) {
-    archiveTournament();
+    archiveTournament(true);
     state = freshState();
     save();
     showPage("dashboard");
@@ -493,10 +530,34 @@ function saveSingle(r, m) {
   match.s1 = s1; match.s2 = s2; match.winner = winner;
   advance(r, m, winner);
   save();
-  const stats = matchStats();
-  if (stats.completed === stats.total) archiveTournament();
+  archiveTournament();
   render();
   toast(`${winner} advances!`);
+}
+
+// Clear a knockout result. Any match it fed into is unplayable again, so
+// its slot is emptied and results that depended on this one are cleared too.
+function clearBracketDownstream(r, m) {
+  const next = state.rounds[r + 1];
+  if (!next) return;
+  const index = Math.floor(m / 2);
+  const target = next[index];
+  if (m % 2 === 0) target.p1 = null; else target.p2 = null;
+  if (target.winner) {
+    target.s1 = null; target.s2 = null; target.winner = null;
+    clearBracketDownstream(r + 1, index);
+  }
+}
+
+function resetSingle(r, m) {
+  const match = state.rounds[r][m];
+  if (!match || match.bye || !match.winner) return;
+  match.s1 = null; match.s2 = null; match.winner = null;
+  clearBracketDownstream(r, m);
+  archiveTournament();          // keep the History card in step with the correction
+  save();
+  render();
+  toast("Result cleared");
 }
 
 function roundName(r, total) {
@@ -511,7 +572,7 @@ function scoreControl(id, value, compact = false) {
   return `
     <div class="score-control ${compact ? "compact" : ""}">
       <button type="button" aria-label="Decrease ${unitOf()}" onclick="changeScore('${id}', -1)">−</button>
-      <input type="number" min="0" inputmode="numeric" id="${id}" value="${value ?? 0}" aria-label="${unitOf()}">
+      <input type="number" min="0" inputmode="numeric" id="${id}" value="${value ?? ""}" aria-label="${unitOf()}">
       <button type="button" aria-label="Increase ${unitOf()}" onclick="changeScore('${id}', 1)">+</button>
     </div>`;
 }
@@ -541,7 +602,10 @@ function renderBracket() {
         ${slot(m.p1, m.s1, "s1")}
         ${slot(m.p2, m.s2, "s2")}
         ${m.bye ? '<p class="bye">Bye - advances automatically</p>' : ""}
-        ${ready ? `<button class="btn small" onclick="saveSingle(${r},${i})">${m.winner ? "Update" : "Save"} result</button>` : ""}
+        ${ready ? `<div class="match-actions">
+          <button class="btn small" onclick="saveSingle(${r},${i})">${m.winner ? "Update" : "Save"} result</button>
+          ${m.winner ? `<button class="btn small ghost" onclick="resetSingle(${r},${i})">Reset</button>` : ""}
+        </div>` : ""}
       </div>`;
     });
     html += "</div>";
@@ -580,6 +644,7 @@ function syncRobinMatch(i) {
 }
 
 function updateRobinScore(i, side, raw) {
+  const focusedId = document.activeElement?.id;
   const text = String(raw).trim();
   const m = state.matches[i];
   if (text === "") {
@@ -591,8 +656,8 @@ function updateRobinScore(i, side, raw) {
   renderDashboard();
   renderResultsPage();
   renderRobin();
-  const stats = matchStats();
-  if (stats.completed === stats.total) archiveTournament();
+  if (focusedId) $(focusedId)?.focus();
+  archiveTournament();
   if (!robinDrawAllowed() && m.s1 !== null && m.s2 !== null && m.s1 === m.s2) {
     toast("Draws are not allowed in this category.", "error");
   }
@@ -610,9 +675,18 @@ function saveRobin(i) {
   const m = state.matches[i];
   if (!m.done) return toast("Enter both scores. Draws are only allowed for general and soccer.", "error");
   render();
-  const stats = matchStats();
-  if (stats.completed === stats.total) archiveTournament();
+  archiveTournament();
   toast("Result recorded");
+}
+
+function resetRobin(i) {
+  const m = state.matches[i];
+  if (!m) return;
+  m.s1 = null; m.s2 = null; m.done = false;
+  archiveTournament();          // keep the History card in step with the correction
+  save();
+  render();
+  toast("Result cleared");
 }
 
 function standings() {
@@ -654,6 +728,7 @@ function renderRobin() {
       <div class="live-match-actions">
         <span class="live-unit">${unitOf()}</span>
         <span class="live-status ${m.done ? "complete" : ""}">${m.done ? "Recorded live" : "Enter score"}</span>
+        ${m.done ? `<button class="text-btn" type="button" onclick="resetRobin(${i})">Clear result</button>` : ""}
       </div>
     </div>`).join("");
 
@@ -697,7 +772,8 @@ function matchStats() {
     const total = state.matches.length;
     return { total, completed: state.matches.filter((m) => m.done).length };
   }
-  const matches = state.rounds.flat();
+  // Byes are not matches a host can play, so they must not inflate progress
+  const matches = state.rounds.flat().filter((m) => !m.bye);
   return { total: matches.length, completed: matches.filter((m) => m.winner).length };
 }
 
@@ -761,24 +837,67 @@ function renderDashboard() {
     : '<div class="results-empty">Players will appear here</div>';
 }
 
+// Win / draw / loss record for the running event
+function playerRecords() {
+  const records = {};
+  state.players.forEach((player) => (records[player] = { w: 0, d: 0, l: 0 }));
+  if (!state.started) return records;
+
+  if (state.format === "robin") {
+    state.matches.filter((m) => m.done).forEach((m) => {
+      if (!records[m.p1] || !records[m.p2]) return;
+      if (m.s1 > m.s2) { records[m.p1].w++; records[m.p2].l++; }
+      else if (m.s2 > m.s1) { records[m.p2].w++; records[m.p1].l++; }
+      else { records[m.p1].d++; records[m.p2].d++; }
+    });
+  } else {
+    state.rounds.flat()
+      .filter((m) => m.winner && !m.bye && m.p1 && m.p2)
+      .forEach((m) => {
+        const loser = m.winner === m.p1 ? m.p2 : m.p1;
+        if (records[m.winner]) records[m.winner].w++;
+        if (records[loser]) records[loser].l++;
+      });
+  }
+  return records;
+}
+
 function renderPlayers() {
   $("playersHeading").textContent = state.players.length
     ? `${state.players.length} contenders`
     : "No players";
   $("playersCount").textContent = `${state.players.length} ${state.players.length === 1 ? "entrant" : "entrants"}`;
+  const records = playerRecords();
   $("playersGrid").innerHTML = state.players.length
-    ? state.players.map((player, i) => `
+    ? state.players.map((player, i) => {
+        const r = records[player] || { w: 0, d: 0, l: 0 };
+        return `
         <article class="player-card">
           <span class="player-avatar">${esc(player.charAt(0).toUpperCase())}</span>
           <b>${esc(player)}</b>
+          ${state.started ? `<div class="player-record">
+            <span>${r.w}W</span><span>${r.d}D</span><span class="loss">${r.l}L</span>
+          </div>` : ""}
           <span>${state.started ? "Tournament entrant" : "Ready to enter"} · #${i + 1}</span>
-        </article>`).join("")
+        </article>`;
+      }).join("")
     : '<div class="empty-players"><div><b>No contenders yet</b><p>Add players in tournament setup.</p></div></div>';
+}
+
+// Shared links carry the whole tournament in the URL, so if an uploaded
+// cover would push the link past what chat apps and browsers handle,
+// fall back to the same snapshot without the image.
+function shareSnapshot() {
+  const MAX_URL = 9000;
+  if (!state.cover) return encodeSnapshot(state);
+  const full = encodeSnapshot(state);
+  if (full.length <= MAX_URL) return full;
+  return encodeSnapshot(Object.assign({}, state, { cover: "" }));
 }
 
 function buildShareLink(type = "guest", competitor = "") {
   if (!state.started) return "";
-  const snapshot = encodeSnapshot(state);
+  const snapshot = shareSnapshot();
   const url = new URL(location.href);
   url.search = "";
   url.hash = "";
@@ -815,7 +934,7 @@ function renderAudience() {
   $("competitorCount").textContent = `${state.players.length} contenders`;
   $("competitorPicker").innerHTML = state.players.length
     ? state.players.map((player, i) => `
-        <button type="button" class="competitor-option" data-player="${esc(player)}">
+        <button type="button" class="competitor-option" data-player="${escAttr(player)}">
           <span class="player-avatar">${esc(player.charAt(0).toUpperCase())}</span>
           <b>${esc(player)}</b>
           <span>#${i + 1}</span>
@@ -872,11 +991,62 @@ function renderResultsPage() {
     : '<div class="results-empty"><div><b>No completed matches</b><p>Results will appear as scores are entered.</p></div></div>';
 }
 
-function archiveTournament() {
-  if (!state.started || state.archived) return;
+function csvCell(value) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+// Download the entered results as a spreadsheet-friendly CSV
+function exportResults() {
+  if (!state.started) return toast("Start a tournament before exporting.", "error");
+  const g = GAMES[state.game] || GAMES.general;
+  const rows = [
+    ["Tournament", state.name],
+    ["Game", gameTitle()],
+    ["Format", state.format === "robin" ? "Round robin" : "Single elimination"],
+    ["Score unit", g.unit],
+    ["Contenders", state.players.length],
+    [],
+    ["Player 1", "Score", "Score", "Player 2", "Winner"]
+  ];
+  completedResults().forEach((m) => {
+    const winner = m.s1 > m.s2 ? m.p1 : m.s2 > m.s1 ? m.p2 : "Draw";
+    rows.push([m.p1, m.s1, m.s2, m.p2, winner]);
+  });
+  const standingsRows = state.format === "robin" && state.started
+    ? [[], ["Pos", "Player", "P", "W", "D", "L", "+/-", "Pts"]].concat(
+        standings().map((t, i) => [i + 1, t.name, t.p, t.w, t.d, t.l, t.diff, t.pts]))
+    : [];
+
+  const csv = rows.concat(standingsRows).map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const slug = (state.name || "tournament").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  link.href = url;
+  link.download = `${slug || "tournament"}-results.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast("Results exported");
+}
+
+// Write the event into History. If the event already has an entry it is
+// updated in place, so correcting a result after completion refreshes the
+// same card instead of adding a duplicate. `force` records a live event
+// (used when the host abandons one for a new tournament).
+function archiveTournament(force = false) {
+  if (!state.started) return;
   const stats = matchStats();
-  tournamentHistory.unshift({
-    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  const finished = stats.total > 0 && stats.completed === stats.total;
+  const id = eventId();
+  const index = tournamentHistory.findIndex((item) => item.id === id);
+  if (index === -1 && !force && !finished) return;
+
+  const previous = index >= 0 ? tournamentHistory[index] : null;
+  const entry = {
+    id,
     name: state.name,
     title: gameTitle(),
     game: state.game || "general",
@@ -884,10 +1054,15 @@ function archiveTournament() {
     players: [...state.players],
     completed: stats.completed,
     total: stats.total,
-    finished: stats.total > 0 && stats.completed === stats.total,
-    date: new Date().toISOString()
-  });
-  state.archived = true;
+    finished,
+    date: previous ? previous.date : new Date().toISOString()
+  };
+  if (previous) entry.updated = new Date().toISOString();
+
+  if (index >= 0) tournamentHistory[index] = entry;
+  else tournamentHistory.unshift(entry);
+
+  state.archived = finished;
   saveHistory();
   save();
 }
@@ -896,7 +1071,7 @@ function renderHistory() {
   const query = ($("historySearch")?.value || "").trim().toLowerCase();
   const filter = $("historyFilter")?.value || "all";
   const entries = tournamentHistory.filter((item) => {
-    const matchesQuery = item.name.toLowerCase().includes(query);
+    const matchesQuery = String(item.name || "").toLowerCase().includes(query);
     const matchesFilter = filter === "all" || item.game === filter;
     return matchesQuery && matchesFilter;
   });
@@ -917,7 +1092,7 @@ function renderHistory() {
             </div>
             <div class="history-meta">
               <strong>${item.finished ? "Completed" : "In progress"}</strong>
-              <span>${item.completed}/${item.total} matches · ${dateText}</span>
+              <span>${item.completed}/${item.total} matches · ${dateText}${item.updated ? " · corrected" : ""}</span>
             </div>
           </article>`;
       }).join("")
@@ -976,8 +1151,10 @@ function showPage(page) {
   });
   document.querySelectorAll(".nav-link").forEach((link) => {
     const linkPage = link.dataset.page;
-    link.classList.toggle("active",
-      linkPage === page || (page === "setup" && linkPage === "tournament"));
+    const isActive = linkPage === page || (page === "setup" && linkPage === "tournament");
+    link.classList.toggle("active", isActive);
+    if (isActive) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
   });
   applyTheme();
   if (page === "setup") render();
@@ -1018,6 +1195,7 @@ document.querySelectorAll(".audience-tab").forEach((tab) => {
   };
 });
 
+$("exportBtn").onclick = exportResults;
 $("historySearch").addEventListener("input", renderHistory);
 $("historyFilter").addEventListener("change", renderHistory);
 

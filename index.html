@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#071108">
   <title>Green VS Arena — Tournament Manager</title>
+  <meta name="description" content="Run knockout or round-robin tournaments for any game. Add contenders, enter scores live, and share a read-only view with guests.">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Green VS Arena — Tournament Manager">
+  <meta property="og:description" content="Run knockout or round-robin tournaments for any game. Add contenders, enter scores live, and share a read-only view with guests.">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23071108'/%3E%3Cpath d='M16 5l2.6 7.2L26 15l-7.4 2.8L16 25l-2.6-7.2L6 15l7.4-2.8z' fill='%2378f29a'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -208,7 +215,10 @@
     <section id="resultsView" class="page-view hidden">
       <div class="page-heading">
         <div><p class="eyebrow">MATCH ARCHIVE</p><h1>Results</h1></div>
-        <span id="resultsProgress" class="count-badge">0% complete</span>
+        <div class="heading-actions">
+          <button id="exportBtn" class="btn ghost" type="button">Export CSV</button>
+          <span id="resultsProgress" class="count-badge">0% complete</span>
+        </div>
       </div>
       <div class="results-layout">
         <div class="panel">

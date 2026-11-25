@@ -1161,8 +1161,33 @@ function showPage(page) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function setDrawerOpen(open) {
+  const isOpen = document.body.classList.contains("drawer-open");
+  if (isOpen === open) return;
+  document.body.classList.toggle("drawer-open", open);
+  $("menuToggle").setAttribute("aria-expanded", String(open));
+  $("menuToggle").setAttribute("aria-label", open ? "Close navigation menu" : "Open navigation menu");
+  if (!open) $("menuToggle").focus({ preventScroll: true });
+}
+
+$("menuToggle").onclick = () => {
+  setDrawerOpen(!document.body.classList.contains("drawer-open"));
+};
+$("drawerBackdrop").onclick = () => setDrawerOpen(false);
+
 document.querySelectorAll(".nav-link").forEach((link) => {
-  link.onclick = () => showPage(link.dataset.page);
+  link.onclick = () => {
+    showPage(link.dataset.page);
+    setDrawerOpen(false);
+  };
+});
+$("mainNav").addEventListener("click", (event) => {
+  if (event.target.closest(".btn")) setDrawerOpen(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && document.body.classList.contains("drawer-open")) {
+    setDrawerOpen(false);
+  }
 });
 
 $("dashboardCreateBtn").onclick = () => openSetup();
@@ -1171,6 +1196,7 @@ $("historyNewBtn").onclick = () => openSetup();
 
 $("shareBtn").onclick = () => {
   if (!state.started) return toast("Start a tournament before sharing.", "error");
+  setDrawerOpen(false);
   $("shareLinkInput").value = buildShareLink("guest");
   $("shareDialog").showModal();
 };
@@ -1201,8 +1227,13 @@ $("historyFilter").addEventListener("change", renderHistory);
 
 document.querySelector(".brand").onclick = (event) => {
   event.preventDefault();
+  setDrawerOpen(false);
   showPage("dashboard");
 };
+
+window.addEventListener("resize", () => {
+  if (window.innerWidth > 760) setDrawerOpen(false);
+});
 
 window.addEventListener("hashchange", () => {
   const page = location.hash.replace("#", "");
@@ -1215,6 +1246,7 @@ buildQuickGames();
 if (publicView) {
   document.querySelectorAll(".host-only").forEach((element) => element.classList.add("hidden"));
   document.querySelectorAll(".main-nav").forEach((nav) => nav.style.display = "none");
+  $("menuToggle").classList.add("hidden");
   showPage(publicView.type === "competitor" ? "competitors" : "tournament");
   if (publicView.type === "competitor" && publicView.competitor) {
     setTimeout(() => selectCompetitor(publicView.competitor), 0);

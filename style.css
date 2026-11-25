@@ -147,6 +147,9 @@ h1, h2, h3, .brand, .stat-card strong { font-family: var(--display); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .main-nav { display: flex; align-items: center; gap: 4px; height: 100%; }
+.menu-toggle,
+.drawer-backdrop { display: none; }
+.main-nav > .btn { flex: 0 0 auto; min-height: 38px; padding: 8px 11px; font-size: 11px; }
 .nav-link {
   height: 100%;
   padding: 0 14px;
@@ -1205,98 +1208,173 @@ tr:nth-child(2) td { color: var(--green-bright); font-weight: 700; }
 
 /* Mobile-first touch and layout refinements */
 @media (max-width: 760px) {
-  html { scroll-padding-top: 118px; }
+  html { scroll-padding-top: 76px; }
   body { min-width: 320px; }
+  body.drawer-open { overflow: hidden; }
 
   .topbar {
     position: sticky;
     top: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: space-between;
-    gap: 0 8px;
-    height: auto;
-    min-height: 0;
-    padding: 8px 12px 0;
+    gap: 10px;
+    height: 62px;
+    min-height: 62px;
+    padding: 0 14px;
   }
-  .brand { min-height: 44px; font-size: 13px; }
-  .brand-mark { width: 32px; height: 32px; }
-  .topbar > .btn {
-    min-height: 40px;
-    max-width: none;
-    padding: 8px 10px;
-    font-size: 11px;
-  }
-  #shareBtn { display: none; }
-
-  .main-nav {
-    position: static;
-    order: 3;
-    flex: 0 0 calc(100% + 24px);
-    width: calc(100% + 24px);
-    height: 52px;
-    margin: 0 -12px;
-    padding: 0 10px;
+  .brand { min-height: 40px; gap: 7px; font-size: 11px; letter-spacing: 0.08em; }
+  .brand-mark { width: 28px; height: 28px; }
+  .menu-toggle {
     display: flex;
-    justify-content: flex-start;
-    gap: 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: var(--green-dim) transparent;
-    background: color-mix(in srgb, var(--bg) 94%, transparent);
-    border: 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    box-shadow: none;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+    cursor: pointer;
   }
-  .main-nav::-webkit-scrollbar { height: 3px; }
-  .main-nav::-webkit-scrollbar-thumb { background: var(--green-dim); border-radius: 5px; }
+  .menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--green);
+    transition: transform 180ms ease, opacity 180ms ease;
+  }
+  body.drawer-open .menu-toggle span:first-child { transform: translateY(7px) rotate(45deg); }
+  body.drawer-open .menu-toggle span:nth-child(2) { opacity: 0; }
+  body.drawer-open .menu-toggle span:last-child { transform: translateY(-7px) rotate(-45deg); }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 62px 0 0;
+    z-index: 28;
+    display: block;
+    visibility: hidden;
+    opacity: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.52);
+    transition: opacity 180ms ease, visibility 180ms ease;
+  }
+  body.drawer-open .drawer-backdrop { visibility: visible; opacity: 1; }
+  .main-nav {
+    position: fixed;
+    z-index: 31;
+    top: 70px;
+    right: 10px;
+    left: auto;
+    order: initial;
+    display: flex;
+    flex: initial;
+    width: min(290px, calc(100vw - 20px));
+    height: auto;
+    max-height: calc(100dvh - 82px);
+    margin: 0;
+    padding: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 3px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--panel) 98%, transparent);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+    transform-origin: top right;
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
+  }
+  body.drawer-open .main-nav {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
   .nav-link {
+    display: flex;
+    align-items: center;
     flex: 0 0 auto;
+    width: 100%;
     height: 44px;
-    min-width: 76px;
-    padding: 0 12px;
+    min-height: 44px;
+    padding: 0 13px;
     border: 0;
     border-radius: 9px;
+    text-align: left;
     font-size: 12px;
-    scroll-snap-align: start;
   }
   .nav-link.active { border: 0; background: color-mix(in srgb, var(--green) 10%, transparent); }
+  .main-nav > .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    min-height: 42px;
+    margin-top: 4px;
+    font-size: 12px;
+  }
 
   main.app-shell {
     width: 100%;
-    min-height: calc(100dvh - 100px);
-    padding: 24px 14px calc(32px + env(safe-area-inset-bottom));
+    min-height: calc(100dvh - 62px);
+    padding: 16px 12px calc(24px + env(safe-area-inset-bottom));
   }
   input, select, textarea { font-size: 16px; }
   button, .btn { touch-action: manipulation; }
-  .panel { padding: 16px; border-radius: 14px; }
-  .dashboard-hero, .page-heading { gap: 16px; margin-bottom: 20px; }
-  .dashboard-hero h1, .page-heading h1 { font-size: clamp(38px, 11vw, 56px); }
-  .dashboard-hero #dashboardIntro { margin-top: 12px; font-size: 14px; }
-  .hero-action { width: 100%; justify-content: space-between; min-height: 48px; }
-  .stat-card { min-height: 120px; padding: 14px; }
-  .stat-card strong { font-size: 34px; }
-  .quick-game { min-height: 72px; padding: 10px; gap: 8px; }
-  .quick-game .qg-icon { width: 38px; height: 38px; flex-basis: 38px; }
-  .quick-game b { font-size: 13px; }
-  .quick-game small { font-size: 10px; }
-  .setup-view { gap: 22px; }
-  .setup-top .intro-copy { font-size: 14px; }
-  .game-card { min-height: 0; padding: 14px; border-radius: 16px; }
-  .game-preview { margin-bottom: 14px; }
-  .setup-card { padding: 18px 14px; }
-  .setup-cols { gap: 16px; }
-  .form-grid { gap: 14px; }
-  .field input, .field select, .add-player input { min-height: 48px; }
-  .icon-btn { min-width: 48px; min-height: 48px; }
-  .chips { gap: 8px; }
-  .chips li { min-height: 38px; padding: 6px 8px 6px 12px; }
-  .chips button { width: 28px; height: 28px; }
+  .panel { padding: 14px; border-radius: 12px; }
+  .dashboard-hero, .page-heading { gap: 12px; margin-bottom: 16px; }
+  .dashboard-hero h1, .page-heading h1 { font-size: clamp(32px, 8.5vw, 44px); line-height: 1.02; }
+  .dashboard-hero #dashboardIntro { margin-top: 9px; font-size: 13px; }
+  .hero-action { width: 100%; justify-content: space-between; min-height: 44px; padding: 9px 13px; font-size: 13px; }
+  .eyebrow { font-size: 9px; margin-bottom: 10px; }
+  .stat-grid { gap: 8px; }
+  .stat-card { min-height: 96px; padding: 11px; border-radius: 11px; }
+  .stat-card p { font-size: 9px; }
+  .stat-card strong { font-size: 28px; }
+  .stat-card > span { font-size: 10px; }
+  .stat-card.accent strong { font-size: 18px; }
+  .quick-game { min-height: 62px; padding: 8px; gap: 7px; border-radius: 10px; }
+  .quick-game .qg-icon { width: 32px; height: 32px; flex-basis: 32px; }
+  .quick-game b { font-size: 12px; }
+  .quick-game small { font-size: 9px; }
+  .setup-view { gap: 16px; }
+  .setup-top h1 { font-size: 36px; }
+  .setup-top .intro-copy { font-size: 13px; }
+  .game-card { min-height: 0; padding: 12px; border-radius: 13px; gap: 10px; }
+  .gc-icon { margin-top: 14px; width: 54px; height: 54px; border-radius: 15px; }
+  .gc-icon svg { width: 36px; height: 36px; }
+  .gc-text { min-width: 120px; margin-top: 14px; }
+  .gc-text b { font-size: 16px; }
+  .gc-text small { font-size: 11px; }
+  .gc-chips i { padding: 4px 7px; font-size: 9px; }
+  .game-preview { margin-bottom: 12px; padding: 11px; gap: 10px; border-radius: 12px; }
+  .gp-icon { width: 36px; height: 36px; }
+  .gp-main h3 { font-size: 17px; }
+  .setup-card { padding: 15px 12px; border-radius: 14px; }
+  .setup-cols { gap: 13px; }
+  .form-grid { gap: 12px; }
+  .card-heading { padding-bottom: 14px; margin-bottom: 16px; }
+  .card-heading h2 { font-size: 19px; }
+  .field label, .roster-heading { font-size: 9px; margin-bottom: 6px; }
+  .field input, .field select, .add-player input { min-height: 44px; height: 44px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
+  .chips { gap: 6px; }
+  .chips li { min-height: 34px; padding: 4px 7px 4px 10px; font-size: 11px; }
+  .chips button { width: 26px; height: 26px; }
+  .start-btn { min-height: 46px; font-size: 13px; }
 
   .grid, .dashboard-grid, .results-layout, .audience-grid, .competitor-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -1304,27 +1382,30 @@ tr:nth-child(2) td { color: var(--green-bright); font-weight: 700; }
   .players-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .history-toolbar { grid-template-columns: minmax(0, 1fr); }
   .history-toolbar input, .history-toolbar select { min-height: 48px; }
-  .history-card { gap: 10px; padding: 12px; }
-  .history-main h3 { font-size: 16px; }
-  .history-main p, .history-meta span { line-height: 1.5; }
+  .history-card { gap: 8px; padding: 10px; min-height: 74px; }
+  .history-icon { width: 42px; height: 42px; }
+  .history-main h3 { font-size: 14px; }
+  .history-main p, .history-meta span { font-size: 10px; line-height: 1.4; }
 
-  .tournament-header { gap: 12px; padding: 18px 14px; }
-  .tournament-header h1 { font-size: clamp(28px, 8vw, 40px); overflow-wrap: anywhere; }
+  .tournament-header { gap: 9px; padding: 14px 11px; border-radius: 13px; }
+  .tournament-header h1 { font-size: clamp(25px, 7vw, 34px); overflow-wrap: anywhere; }
+  .tournament-header .eyebrow { margin-bottom: 5px; }
+  .format-badge { font-size: 10px; padding: 6px 9px; }
   .format-badge { max-width: 100%; white-space: normal; }
   .bracket { gap: 20px; padding-bottom: 14px; scroll-snap-type: x mandatory; }
-  .round { min-width: min(78vw, 290px); scroll-snap-align: start; }
+  .round { min-width: min(78vw, 260px); scroll-snap-align: start; }
   .match-live {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
-    padding: 10px;
+    padding: 8px;
   }
   .match-live .live-player:first-child { grid-column: 1; grid-row: 1; }
   .match-live .live-player:nth-child(3) { grid-column: 2; grid-row: 1; }
   .live-score { grid-column: 1 / -1; grid-row: 2; min-height: 44px; }
   .live-match-actions { grid-column: 1 / -1; grid-row: 3; min-height: 40px; }
-  .score-control.compact { grid-template-columns: 32px 40px 32px; gap: 2px; }
-  .score-control.compact button { width: 32px; height: 40px; font-size: 18px; }
-  .score-control.compact input { width: 40px; height: 40px; font-size: 16px; }
+  .score-control.compact { grid-template-columns: 30px 38px 30px; gap: 2px; }
+  .score-control.compact button { width: 30px; height: 36px; font-size: 16px; }
+  .score-control.compact input { width: 38px; height: 36px; font-size: 16px; }
 
   .share-preview { grid-template-columns: minmax(0, 1fr); justify-items: start; gap: 14px; padding: 4px 0; }
   .share-qr { width: 104px; height: 104px; background-size: 16px 16px; }
@@ -1345,13 +1426,14 @@ tr:nth-child(2) td { color: var(--green-bright); font-weight: 700; }
 @media (max-width: 380px) {
   main.app-shell { padding-inline: 10px; }
   .stat-grid { gap: 8px; }
-  .stat-card { min-height: 108px; padding: 11px; }
+  .stat-card { min-height: 90px; padding: 9px; }
+  .stat-card strong { font-size: 25px; }
   .quick-games { gap: 7px; }
   .quick-game .qg-icon { display: none; }
   .match-live { padding: 8px; }
   .score-control.compact { grid-template-columns: 30px 36px 30px; }
-  .score-control.compact button { width: 30px; }
-  .score-control.compact input { width: 36px; }
+  .score-control.compact button { width: 30px; height: 36px; }
+  .score-control.compact input { width: 36px; height: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

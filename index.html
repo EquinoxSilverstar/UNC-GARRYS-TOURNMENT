@@ -31,7 +31,10 @@
       </span>
       <span>GREEN VS <b>ARENA</b></span>
     </a>
-    <nav class="main-nav" aria-label="Main navigation">
+    <button id="menuToggle" class="menu-toggle" type="button" aria-label="Open navigation menu" aria-controls="mainNav" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <nav id="mainNav" class="main-nav" aria-label="Main navigation">
       <button class="nav-link active" data-page="dashboard" type="button">Overview</button>
       <button class="nav-link" data-page="tournament" type="button">Tournament</button>
       <button class="nav-link" data-page="players" type="button">Players</button>
@@ -39,12 +42,13 @@
       <button class="nav-link" data-page="history" type="button">History</button>
       <button class="nav-link host-only" data-page="guests" type="button">Guests</button>
       <button class="nav-link host-only" data-page="competitors" type="button">Competitors</button>
+      <button id="shareBtn" class="btn ghost host-only" type="button">Share</button>
+      <button id="resetBtn" class="btn ghost hidden" type="button">
+        <span aria-hidden="true">+</span> New tournament
+      </button>
     </nav>
-    <button id="shareBtn" class="btn ghost host-only" type="button">Share</button>
-    <button id="resetBtn" class="btn ghost hidden" type="button">
-      <span aria-hidden="true">+</span> New tournament
-    </button>
   </header>
+  <button id="drawerBackdrop" class="drawer-backdrop" type="button" aria-label="Close navigation menu" tabindex="-1"></button>
 
   <main class="app-shell">
 

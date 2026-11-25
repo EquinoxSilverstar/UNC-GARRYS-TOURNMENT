@@ -207,7 +207,8 @@ function confetti() {
 // ---------- Theme: the whole app takes the colour of the game ----------
 function applyTheme() {
   const game = state.started || activePage === "setup" ? state.game : "general";
-  document.body.className = "g-" + (GAMES[game] ? game : "general");
+  document.body.classList.remove("g-general", "g-soccer", "g-fighting", "g-shooter");
+  document.body.classList.add("g-" + (GAMES[game] ? game : "general"));
 }
 
 // ---------- Game selector (the dope cards) ----------

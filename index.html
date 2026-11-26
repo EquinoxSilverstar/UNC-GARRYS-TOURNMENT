@@ -265,7 +265,10 @@
     <section id="guestsView" class="page-view hidden">
       <div class="page-heading">
         <div><p class="eyebrow">SPECTATOR ACCESS</p><h1>Guest room</h1></div>
-        <button id="guestShareBtn" class="btn primary" type="button">Create guest link</button>
+        <div class="guest-actions">
+          <button id="guestCopyLinkBtn" class="btn ghost" type="button">Copy guest link</button>
+          <button id="guestShareBtn" class="btn primary" type="button">Share link</button>
+        </div>
       </div>
       <div class="audience-grid">
         <article class="panel audience-share">
@@ -315,7 +318,7 @@
         <div><p class="eyebrow">TOURNAMENT LINK</p><h2>Invite spectators</h2></div>
         <button class="dialog-close" value="close" aria-label="Close">×</button>
       </div>
-      <p class="dialog-copy">Anyone with this link can open a read-only view of the tournament.</p>
+      <p class="dialog-copy">The link carries this tournament with it, so anyone can open a read-only view of the bracket and scores — no account or server needed. Event data is stored in this browser.</p>
       <div class="audience-tabs" role="group" aria-label="Link audience">
         <button type="button" class="audience-tab active" data-view="guest">Guest view</button>
         <button type="button" class="audience-tab" data-view="competitor">Competitor view</button>

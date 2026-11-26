@@ -23,6 +23,7 @@
   <div class="bg-fx" aria-hidden="true"><i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i></div>
   <canvas id="confetti" aria-hidden="true"></canvas>
   <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="cloudStatus" class="cloud-status hidden" role="status" aria-live="polite"></div>
 
   <header class="topbar">
     <a class="brand" href="#" aria-label="Green VS Arena home">
@@ -318,7 +319,7 @@
         <div><p class="eyebrow">TOURNAMENT LINK</p><h2>Invite spectators</h2></div>
         <button class="dialog-close" value="close" aria-label="Close">×</button>
       </div>
-      <p class="dialog-copy">The link carries this tournament with it, so anyone can open a read-only view of the bracket and scores — no account or server needed. Event data is stored in this browser.</p>
+      <p class="dialog-copy">Guests can follow a read-only view of the bracket and scores. Connect Firebase for live updates across devices; without it, links use a one-time snapshot.</p>
       <div class="audience-tabs" role="group" aria-label="Link audience">
         <button type="button" class="audience-tab active" data-view="guest">Guest view</button>
         <button type="button" class="audience-tab" data-view="competitor">Competitor view</button>
@@ -330,6 +331,10 @@
     </form>
   </dialog>
 
-  <script src="script.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script defer src="firebase-config.js"></script>
+  <script defer src="script.js"></script>
 </body>
 </html>

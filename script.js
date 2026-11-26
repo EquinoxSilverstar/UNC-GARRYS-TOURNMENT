@@ -52,11 +52,20 @@ const gameTitle = () => state.title || (GAMES[state.game] || GAMES.general).name
 
 // ---------- State (saved in the browser so refresh keeps it) ----------
 function freshState() {
-  return { name: "", format: "single", game: "general", title: "", titleCustom: false, cover: "", players: [], rounds: [], matches: [], started: false, archived: false, champion: null };
+  return { name: "", format: "single", game: "general", title: "", titleCustom: false, cover: "", players: [], rounds: [], matches: [], started: false, archived: false, champion: null, cloudId: null, ownerUid: null };
 }
+const firebaseConfig = window.GREEN_ARENA_FIREBASE_CONFIG;
+const cloudConfigured = !!(firebaseConfig && firebaseConfig.apiKey &&
+  firebaseConfig.apiKey !== "YOUR_API_KEY" && firebaseConfig.databaseURL &&
+  !firebaseConfig.databaseURL.includes("YOUR_"));
+let cloudDatabase = null;
+let cloudAuth = null;
+let cloudUserPromise = null;
+let cloudWriteQueue = Promise.resolve();
 function save() {
   if (publicView) return;
   try { localStorage.setItem("greenArena", JSON.stringify(state)); } catch { /* storage blocked - keep running */ }
+  if (state.started && cloudConfigured) queueCloudSave();
 }
 function saveHistory() {
   if (publicView) return;
@@ -77,12 +86,16 @@ function readPublicShare() {
   const params = new URLSearchParams(location.search);
   const view = params.get("view");
   if (view !== "guest" && view !== "competitor") return null;
+  const id = params.get("id");
+  if (id && /^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+    return { type: view, competitor: params.get("competitor"), id, live: true };
+  }
   const encoded = params.get("data");
   if (!encoded) return null;
   try {
     const snapshot = decodePublicSnapshot(encoded);
     if (!snapshot.started) return null;
-    return { type: view, competitor: params.get("competitor"), snapshot };
+    return { type: view, competitor: params.get("competitor"), snapshot, live: false };
   } catch {
     return null;
   }
@@ -130,6 +143,122 @@ function toast(msg, type = "ok") {
   $("toasts").appendChild(t);
   setTimeout(() => t.classList.add("out"), 2600);
   setTimeout(() => t.remove(), 3100);
+}
+
+function setCloudStatus(message, isError = false) {
+  const status = $("cloudStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("hidden", !message);
+  status.classList.toggle("error", isError);
+}
+
+function initializeCloud() {
+  if (!cloudConfigured) {
+    setCloudStatus("Live sharing is not configured. Follow FIREBASE_SETUP.md to connect Firebase.");
+    return false;
+  }
+  if (!window.firebase) {
+    setCloudStatus("Firebase SDK failed to load. Check your connection and reload.", true);
+    return false;
+  }
+  try {
+    const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(firebaseConfig);
+    cloudDatabase = app.database();
+    cloudAuth = app.auth();
+    return true;
+  } catch (error) {
+    setCloudStatus(`Firebase could not start: ${error.message}`, true);
+    return false;
+  }
+}
+
+async function getCloudUser() {
+  if (cloudAuth.currentUser) return cloudAuth.currentUser;
+  if (!cloudUserPromise) {
+    cloudUserPromise = (async () => {
+      const currentUser = await new Promise((resolve, reject) => {
+        let unsubscribe = () => {};
+        unsubscribe = cloudAuth.onAuthStateChanged((user) => {
+          unsubscribe();
+          resolve(user);
+        }, reject);
+      });
+      if (currentUser) return currentUser;
+      const credential = await cloudAuth.signInAnonymously();
+      return credential.user;
+    })();
+  }
+  try {
+    return await cloudUserPromise;
+  } catch (error) {
+    cloudUserPromise = null;
+    throw error;
+  }
+}
+
+async function publishCloudState(targetState = state) {
+  if (publicView || !targetState.started) return false;
+  if (!initializeCloud()) throw new Error("Firebase is not configured or could not initialize.");
+  const user = await getCloudUser();
+  const uid = user.uid;
+  if (targetState.ownerUid && targetState.ownerUid !== uid) {
+    throw new Error("This browser is no longer signed in as the tournament owner. Use the original browser profile.");
+  }
+  if (!targetState.cloudId) targetState.cloudId = cloudDatabase.ref("tournaments").push().key;
+  targetState.ownerUid = uid;
+  if (targetState === state) {
+    try { localStorage.setItem("greenArena", JSON.stringify(state)); } catch { /* Local storage may be unavailable. */ }
+  }
+
+  await cloudDatabase.ref(`tournaments/${targetState.cloudId}`).set({
+    ownerUid: uid,
+    snapshot: targetState
+  });
+  if (targetState === state) $("guestLinkInput").value = buildShareLink("guest");
+  setCloudStatus("Live sharing connected. Guest links update as you record results.");
+  return true;
+}
+
+function queueCloudSave() {
+  const targetState = state;
+  cloudWriteQueue = cloudWriteQueue
+    .then(() => publishCloudState(targetState))
+    .catch((error) => {
+      console.error("Tournament cloud sync failed:", error);
+      setCloudStatus(`Live sync failed: ${error.message}. Your changes are still saved on this device.`, true);
+    });
+}
+
+async function prepareShareLink(type = "guest", competitor = "") {
+  if (cloudConfigured && state.started) {
+    await cloudWriteQueue;
+    await publishCloudState();
+  }
+  return buildShareLink(type, competitor);
+}
+
+function subscribeToLiveTournament() {
+  if (!publicView?.live) return;
+  if (!initializeCloud()) return;
+  setCloudStatus("Connecting to live tournament…");
+  cloudDatabase.ref(`tournaments/${publicView.id}`).on("value", (snapshot) => {
+    const record = snapshot.val();
+    if (!record || !record.snapshot || !record.snapshot.started) {
+      setCloudStatus("This live tournament link is unavailable or has not started.", true);
+      return;
+    }
+    state = Object.assign(freshState(), record.snapshot);
+    showPage(publicView.type === "competitor" ? "competitors" : "tournament");
+    render();
+    if (publicView.type === "competitor" && publicView.competitor) {
+      selectCompetitor(publicView.competitor);
+    }
+    setCloudStatus("Live tournament · updates appear automatically.");
+  }, (error) => {
+    console.error("Could not read live tournament:", error);
+    setCloudStatus(`Could not load live tournament: ${error.message}`, true);
+  });
 }
 
 function setNum(el, to) {
@@ -217,6 +346,7 @@ function buildQuickGames() {
 }
 
 function selectGame(key) {
+  if (publicView) return;
   if (key !== state.game) {
     state.title = "";
     state.titleCustom = false;
@@ -285,7 +415,7 @@ function syncCoverUI() {
 }
 
 function resizeCover(file) {
-  if (!file) return;
+  if (publicView || !file) return;
   if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
     toast("Choose a JPG, PNG or WebP image.", "error");
     return;
@@ -332,6 +462,7 @@ function renderTournamentHeader() {
 
 // ---------- Setup screen ----------
 function addPlayer(name) {
+  if (publicView) return;
   name = name.trim();
   if (!name) return;
   if (state.players.some((p) => p.toLowerCase() === name.toLowerCase())) {
@@ -345,6 +476,7 @@ function addPlayer(name) {
 }
 
 function removePlayer(i) {
+  if (publicView) return;
   state.players.splice(i, 1);
   save();
   render();
@@ -354,10 +486,11 @@ $("addBtn").onclick = () => { addPlayer($("pName").value); $("pName").value = ""
 $("pName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addBtn").click(); });
 
 // Save the name + format as you type, so adding a player never wipes them
-$("tName").addEventListener("input", () => { state.name = $("tName").value; save(); });
-$("tFormat").addEventListener("change", () => { state.format = $("tFormat").value; save(); });
+$("tName").addEventListener("input", () => { if (publicView) return; state.name = $("tName").value; save(); });
+$("tFormat").addEventListener("change", () => { if (publicView) return; state.format = $("tFormat").value; save(); });
 
 $("sampleBtn").onclick = () => {
+  if (publicView) return;
   ["Shadow", "Viper", "Blaze", "Frost", "Titan", "Ghost", "Nova", "Rogue"].forEach((n) => {
     if (!state.players.some((p) => p.toLowerCase() === n.toLowerCase())) state.players.push(n);
   });
@@ -366,6 +499,7 @@ $("sampleBtn").onclick = () => {
 };
 
 $("startBtn").onclick = () => {
+  if (publicView) return;
   if (state.players.length < 2) {
     $("setupMsg").textContent = "Add at least 2 players to start.";
     return;
@@ -386,6 +520,7 @@ $("startBtn").onclick = () => {
 
 // Open the setup page (optionally with a game pre-selected)
 function openSetup(game) {
+  if (publicView) return;
   if (state.started) {
     if (!confirm("Start a new tournament? The current one will be saved to History.")) return;
     archiveTournament();
@@ -398,6 +533,7 @@ function openSetup(game) {
 }
 
 $("resetBtn").onclick = () => {
+  if (publicView) return;
   if (confirm("Start over? Current tournament will be saved to History.")) {
     archiveTournament();
     state = freshState();
@@ -460,6 +596,7 @@ function advance(r, m, winner) {
 }
 
 function saveSingle(r, m) {
+  if (publicView) return;
   const a = $(`s1-${r}-${m}`).value;
   const b = $(`s2-${r}-${m}`).value;
   if (a === "" || b === "") return toast("Enter both scores.", "error");
@@ -501,6 +638,7 @@ function scoreControl(id, value, compact = false) {
 }
 
 function changeScore(id, delta) {
+  if (publicView) return;
   const input = $(id);
   if (!input) return;
   input.value = Math.max(0, (Number(input.value) || 0) + delta);
@@ -517,7 +655,7 @@ function renderBracket() {
       const slot = (player, score, key) => `
         <div class="slot ${m.winner && m.winner === player ? "win" : ""} ${player ? "" : "tbd"}">
           <span class="slot-name">${player ? esc(player) : "TBD"}</span>
-          ${ready ? scoreControl(`${key}-${r}-${i}`, score, true)
+          ${ready && !publicView ? scoreControl(`${key}-${r}-${i}`, score, true)
                   : `<strong class="slot-score">${score ?? ""}</strong>`}
         </div>`;
 
@@ -525,7 +663,7 @@ function renderBracket() {
         ${slot(m.p1, m.s1, "s1")}
         ${slot(m.p2, m.s2, "s2")}
         ${m.bye ? '<p class="bye">Bye - advances automatically</p>' : ""}
-        ${ready ? `<button class="btn small" onclick="saveSingle(${r},${i})">${m.winner ? "Update" : "Save"} result</button>` : ""}
+        ${ready && !publicView ? `<button class="btn small" onclick="saveSingle(${r},${i})">${m.winner ? "Update" : "Save"} result</button>` : ""}
       </div>`;
     });
     html += "</div>";
@@ -548,6 +686,7 @@ function buildRoundRobin() {
 }
 
 function saveRobin(i) {
+  if (publicView) return;
   const a = $(`rs1-${i}`)?.value ?? state.matches[i].s1;
   const b = $(`rs2-${i}`)?.value ?? state.matches[i].s2;
   if (a === "" || b === "") return toast("Enter both scores.", "error");
@@ -583,14 +722,14 @@ function renderRobin() {
     <div class="match-live ${m.done ? "done" : ""}">
       <div class="live-player"><b>${esc(m.p1)}</b></div>
       <div class="live-score">
-        ${scoreControl(`rs1-${i}`, m.s1, true)}
+        ${publicView ? `<strong class="slot-score">${m.s1 ?? "—"}</strong>` : scoreControl(`rs1-${i}`, m.s1, true)}
         <i>:</i>
-        ${scoreControl(`rs2-${i}`, m.s2, true)}
+        ${publicView ? `<strong class="slot-score">${m.s2 ?? "—"}</strong>` : scoreControl(`rs2-${i}`, m.s2, true)}
       </div>
       <div class="live-player"><b>${esc(m.p2)}</b></div>
       <div class="live-match-actions">
         <span class="live-unit">${unitOf()}</span>
-        <button class="btn small" onclick="saveRobin(${i})">${m.done ? "Update score" : "Record result"}</button>
+        ${publicView ? "" : `<button class="btn small" onclick="saveRobin(${i})">${m.done ? "Update score" : "Record result"}</button>`}
       </div>
     </div>`).join("");
 
@@ -715,12 +854,15 @@ function renderPlayers() {
 
 function buildShareLink(type = "guest", competitor = "") {
   if (!state.started) return "";
-  const snapshot = encodeSnapshot(state);
   const url = new URL(location.href);
   url.search = "";  
   url.hash = "";
   url.searchParams.set("view", type);
-  url.searchParams.set("data", snapshot);
+  if (cloudConfigured && state.cloudId) {
+    url.searchParams.set("id", state.cloudId);
+  } else {
+    url.searchParams.set("data", encodeSnapshot(state));
+  }
   if (competitor) url.searchParams.set("competitor", competitor);
   return url.toString();
 }
@@ -895,6 +1037,7 @@ function render() {
 }
 
 function showPage(page) {
+  if (publicView) page = publicView.type === "competitor" ? "competitors" : "tournament";
   if (page === "tournament" && !state.started) page = "setup";
   activePage = page;
   const pages = {
@@ -912,8 +1055,11 @@ function showPage(page) {
   });
   document.querySelectorAll(".nav-link").forEach((link) => {
     const linkPage = link.dataset.page;
-    link.classList.toggle("active",
-      linkPage === page || (page === "setup" && linkPage === "tournament"));
+    const isActive = linkPage === page || (page === "setup" && linkPage === "tournament");
+    link.classList.toggle("active", isActive);
+    if (isActive && window.innerWidth <= 760) {
+      link.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    }
   });
   applyTheme();
   if (page === "setup") render();
@@ -930,14 +1076,47 @@ $("historyNewBtn").onclick = () => openSetup();
 
 $("shareBtn").onclick = () => {
   if (!state.started) return toast("Start a tournament before sharing.", "error");
-  $("shareLinkInput").value = buildShareLink("guest");
-  $("shareDialog").showModal();
+  prepareShareLink("guest")
+    .then((link) => {
+      $("shareLinkInput").value = link;
+      $("shareDialog").showModal();
+    })
+    .catch((error) => {
+      setCloudStatus(`Could not prepare a live link: ${error.message}`, true);
+      toast("Could not prepare a live guest link.", "error");
+    });
 };
-$("guestShareBtn").onclick = () => $("shareDialog").showModal();
-$("copyGuestLink").onclick = () => copyText($("guestLinkInput").value);
+$("guestShareBtn").onclick = () => {
+  prepareShareLink("guest")
+    .then((link) => {
+      $("shareLinkInput").value = link;
+      $("shareDialog").showModal();
+    })
+    .catch((error) => {
+      setCloudStatus(`Could not prepare a live link: ${error.message}`, true);
+      toast("Could not prepare a live guest link.", "error");
+    });
+};
+$("guestCopyLinkBtn").onclick = () => {
+  prepareShareLink("guest")
+    .then(copyText)
+    .catch((error) => {
+      setCloudStatus(`Could not prepare a live link: ${error.message}`, true);
+      toast("Could not prepare a live guest link.", "error");
+    });
+};
+$("copyGuestLink").onclick = () => {
+  prepareShareLink("guest")
+    .then(copyText)
+    .catch((error) => {
+      setCloudStatus(`Could not prepare a live link: ${error.message}`, true);
+      toast("Could not prepare a live guest link.", "error");
+    });
+};
 $("dialogCopyBtn").onclick = () => copyText($("shareLinkInput").value);
  $("coverInput").onchange = (event) => resizeCover(event.target.files[0]);
 $("removeCover").onclick = () => {
+  if (publicView) return;
   state.cover = "";
   $("coverInput").value = "";
   save();
@@ -950,7 +1129,12 @@ document.querySelectorAll(".audience-tab").forEach((tab) => {
   tab.onclick = () => {
     document.querySelectorAll(".audience-tab").forEach((item) => item.classList.remove("active"));
     tab.classList.add("active");
-    $("shareLinkInput").value = buildShareLink(tab.dataset.view);
+    prepareShareLink(tab.dataset.view)
+      .then((link) => { $("shareLinkInput").value = link; })
+      .catch((error) => {
+        setCloudStatus(`Could not prepare a live link: ${error.message}`, true);
+        toast("Could not prepare a live guest link.", "error");
+      });
   };
 });
 
@@ -974,10 +1158,13 @@ if (publicView) {
   document.querySelectorAll(".host-only").forEach((element) => element.classList.add("hidden"));
   document.querySelectorAll(".main-nav").forEach((nav) => nav.style.display = "none");
   showPage(publicView.type === "competitor" ? "competitors" : "tournament");
-  if (publicView.type === "competitor" && publicView.competitor) {
+  if (!publicView.live && publicView.type === "competitor" && publicView.competitor) {
     setTimeout(() => selectCompetitor(publicView.competitor), 0);
   }
 } else {
   showPage("dashboard");
 }
 render();
+if (publicView?.live) subscribeToLiveTournament();
+else if (!publicView && state.started && cloudConfigured) queueCloudSave();
+else if (!publicView) initializeCloud();

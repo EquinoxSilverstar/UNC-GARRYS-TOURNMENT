@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "tournaments": {
+      "$tournamentId": {
+        ".read": true,
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && data.child('ownerUid').val() === auth.uid && newData.child('ownerUid').val() === auth.uid))",
+        ".validate": "newData.hasChildren(['ownerUid', 'snapshot'])",
+        "ownerUid": {
+          ".validate": "newData.isString()"
+        },
+        "snapshot": {
+          ".validate": "newData.hasChildren(['started', 'players']) && newData.child('started').val() === true"
+        }
+      }
+    }
+  }
+}
